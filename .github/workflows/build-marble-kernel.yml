@@ -34,10 +34,10 @@ on:
           - rvclang-20.1.1
           - zyc-16.0.6
       kernel_branch:
-        description: "Evolution-X-Devices/kernel_xiaomi_sm8450 branch"
+        description: "Evolution-X-Devices/kernel_xiaomi_sm8450 branch or 40-char commit SHA (default matches EvoX 12.2 Sep 2026)"
         type: string
         required: true
-        default: "cnb"
+        default: "4a234e4dff2373f31709a1d5acfc8eb3d636d571"
       localversion_suffix:
         description: "Optional suffix appended after -gki (leave empty to keep -gki)"
         type: string

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 KERNEL_REPO="${KERNEL_REPO:-https://github.com/Evolution-X-Devices/kernel_xiaomi_sm8450.git}"
-KERNEL_BRANCH="${KERNEL_BRANCH:-cnb}"
+KERNEL_BRANCH="${KERNEL_BRANCH:-4a234e4dff2373f31709a1d5acfc8eb3d636d571}"
 ROOT_MODE="${ROOT_MODE:-ksun-susfs}"
 LTO_MODE="${LTO_MODE:-full}"
 ENABLE_PERF_PATCHES="${ENABLE_PERF_PATCHES:-true}"
@@ -66,8 +66,16 @@ download_toolchain() {
 
 clone_kernel() {
   rm -rf "$KERNEL_DIR"
-  log "Cloning $KERNEL_REPO (branch: $KERNEL_BRANCH)..."
-  git clone --depth=1 --branch "$KERNEL_BRANCH" "$KERNEL_REPO" "$KERNEL_DIR"
+  log "Cloning $KERNEL_REPO (ref: $KERNEL_BRANCH)..."
+  if [[ "$KERNEL_BRANCH" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    mkdir -p "$KERNEL_DIR"
+    git -C "$KERNEL_DIR" init -q
+    git -C "$KERNEL_DIR" remote add origin "$KERNEL_REPO"
+    git -C "$KERNEL_DIR" fetch --depth=1 origin "$KERNEL_BRANCH"
+    git -C "$KERNEL_DIR" checkout --detach FETCH_HEAD
+  else
+    git clone --depth=1 --branch "$KERNEL_BRANCH" "$KERNEL_REPO" "$KERNEL_DIR"
+  fi
   KERNEL_COMMIT="$(git -C "$KERNEL_DIR" rev-parse --short=12 HEAD)"
   log "Kernel HEAD: $KERNEL_COMMIT"
 }
@@ -134,14 +142,12 @@ apply_perf_patches() {
   log "Fetching WildKernels/kernel_patches..."
   git clone --depth=1 https://github.com/WildKernels/kernel_patches.git "$WORK_DIR/kernel_patches"
 
-  # Strictly KMI-safe patches only (excludes struct-layout-altering patches like file_struct_8bytes_align.patch)
+  # Strictly KMI-safe .c-only patches (excludes header/struct-layout-altering patches)
   local patches=(
     "reduce_cache_pressure.patch"
     "minimise_wakeup_time.patch"
     "int_sqrt.patch"
-    "f2fs_reduce_congestion.patch"
     "reduce_freeze_timeout.patch"
-    "increase_sk_mem_packets.patch"
     "silence_irq_cpu_logspam.patch"
     "silence_system_logspam.patch"
     "avoid_extra_s2idle_wake_attempts.patch"
@@ -219,6 +225,7 @@ configure_kernel() {
 
   # Verify critical configs survived olddefconfig
   grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config" || die "CONFIG_MODVERSIONS=y missing after olddefconfig!"
+  grep -q '^CONFIG_CFI_PERMISSIVE=y$' "$OUT_DIR/.config" || die "CONFIG_CFI_PERMISSIVE=y missing after olddefconfig!"
   grep -q '^CONFIG_DEFAULT_BBR=y$' "$OUT_DIR/.config" || die "CONFIG_DEFAULT_BBR=y missing after olddefconfig!"
   if [[ "$ROOT_MODE" == "ksun-susfs" ]]; then
     grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config" || die "CONFIG_KSU=y missing after olddefconfig!"
