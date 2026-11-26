@@ -92,14 +92,14 @@ integrate_root() {
 
       if ! patch -p1 --forward --batch --fuzz=3 < "$susfs_patch"; then
         log "SuSFS patch had rejects:"
-        find "$KERNEL_DIR" -name '*.rej' -print -exec head -n 40 {} + || true
+        git -C "$KERNEL_DIR" ls-files --others --exclude-standard '*.rej' | xargs -r head -n 40 || true
         die "Failed to apply SuSFS patch cleanly"
       fi
 
       local rej_files
-      rej_files="$(find "$KERNEL_DIR" -name '*.rej' -print -quit || true)"
+      rej_files="$(git -C "$KERNEL_DIR" ls-files --others --exclude-standard '*.rej' || true)"
       if [[ -n "$rej_files" ]]; then
-        find "$KERNEL_DIR" -name '*.rej' -print -exec head -n 40 {} + || true
+        echo "$rej_files" | xargs -r head -n 40 || true
         die "SuSFS patch left .rej files"
       fi
 
