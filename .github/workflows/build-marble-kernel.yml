@@ -1,0 +1,137 @@
+name: Build POCO F5 (marble) Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_mode:
+        description: "Root integration mode"
+        type: choice
+        required: true
+        default: "ksun-susfs"
+        options:
+          - ksun-susfs
+          - ksun-only
+          - none
+      lto_mode:
+        description: "Clang Link-Time Optimization (full = max performance, thin = faster build)"
+        type: choice
+        required: true
+        default: "full"
+        options:
+          - full
+          - thin
+      enable_perf_patches:
+        description: "Apply KMI-safe WildKernels performance patches"
+        type: boolean
+        required: true
+        default: true
+      toolchain:
+        description: "Clang toolchain"
+        type: choice
+        required: true
+        default: "rvclang-20.1.1"
+        options:
+          - rvclang-20.1.1
+          - zyc-16.0.6
+      kernel_branch:
+        description: "Evolution-X-Devices/kernel_xiaomi_sm8450 branch"
+        type: string
+        required: true
+        default: "cnb"
+      localversion_suffix:
+        description: "Optional suffix appended after -gki (leave empty to keep -gki)"
+        type: string
+        required: false
+        default: ""
+      create_release:
+        description: "Publish output zip to GitHub Releases"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build marble (${{ inputs.root_mode }} / ${{ inputs.lto_mode }} LTO)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache cpio curl flex git \
+            libelf-dev libssl-dev lld llvm python3 rsync tar unzip xz-utils zip zstd
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-marble-${{ inputs.kernel_branch }}-${{ inputs.toolchain }}-${{ inputs.lto_mode }}-${{ inputs.root_mode }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-marble-${{ inputs.kernel_branch }}-${{ inputs.toolchain }}-${{ inputs.lto_mode }}-${{ inputs.root_mode }}-
+            ccache-marble-${{ inputs.kernel_branch }}-${{ inputs.toolchain }}-
+
+      - name: Build kernel and AnyKernel3 zip
+        env:
+          ROOT_MODE: ${{ inputs.root_mode }}
+          LTO_MODE: ${{ inputs.lto_mode }}
+          ENABLE_PERF_PATCHES: ${{ inputs.enable_perf_patches }}
+          TOOLCHAIN: ${{ inputs.toolchain }}
+          KERNEL_BRANCH: ${{ inputs.kernel_branch }}
+          LOCALVERSION_SUFFIX: ${{ inputs.localversion_suffix }}
+        run: |
+          export CCACHE_DIR="$HOME/.ccache"
+          ccache -M 4G
+          ccache -z
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+          ccache -s
+
+      - name: Write build summary
+        if: always() && hashFiles('artifacts/build-info.txt') != ''
+        run: |
+          source artifacts/build-info.txt
+          {
+            echo "## MarblePerf Kernel Build Summary"
+            echo ""
+            echo "| Parameter | Value |"
+            echo "|---|---|"
+            echo "| **Device** | Xiaomi POCO F5 (\`marble\`) |"
+            echo "| **Kernel Release** | \`${KERNEL_RELEASE}\` |"
+            echo "| **Base Source** | \`${KERNEL_REPO}\` (\`${KERNEL_BRANCH}\` @ \`${KERNEL_COMMIT}\`) |"
+            echo "| **Root Mode** | \`${ROOT_MODE}\` |"
+            echo "| **LTO Mode** | \`${LTO_MODE}\` |"
+            echo "| **Toolchain** | \`${TOOLCHAIN}\` |"
+            echo "| **Artifact** | \`${ZIP_NAME}\` |"
+            echo "| **SHA-256** | \`${SHA256}\` |"
+            echo "| **Applied Perf Patches** | ${APPLIED_PATCHES} |"
+            echo "| **Skipped Perf Patches** | ${SKIPPED_PATCHES} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarblePerf-marble-${{ inputs.root_mode }}-${{ inputs.lto_mode }}
+          path: artifacts/*
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: inputs.create_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: marble-${{ inputs.root_mode }}-${{ github.run_number }}
+          name: MarblePerf ${{ inputs.root_mode }} (${{ inputs.lto_mode }} LTO) #${{ github.run_number }}
+          body_path: artifacts/build-info.txt
+          files: |
+            artifacts/*.zip
+            artifacts/*.sha256

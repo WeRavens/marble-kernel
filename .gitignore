@@ -1,0 +1,9 @@
+out/
+work/
+toolchains/
+kernel/
+artifacts/
+*.zip
+*.img
+__pycache__/
+.DS_Store
