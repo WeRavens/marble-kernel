@@ -11,24 +11,22 @@ do.cleanup=1
 do.cleanuponabort=0
 device.name1=marble
 device.name2=marblein
-supported.versions=14-17
+supported.versions=
 supported.patchlevels=
 supported.vendorpatchlevels=
 '; }
 
 ### AnyKernel setup
-# import properties
+# boot shell variables (MUST be uppercase and set before sourcing ak3-core.sh)
+BLOCK=boot;
+IS_SLOT_DEVICE=1;
+RAMDISK_COMPRESSION=auto;
+PATCH_VBMETA_FLAG=auto;
+
+# import functions/variables and setup patching
 . tools/ak3-core.sh;
 
 # boot install (GKI 2.0: replace kernel Image only, keep ROM ramdisk & DTB intact)
-block=boot;
-is_slot_device=1;
-ramdisk_compression=auto;
-patch_vbmeta_flag=auto;
-
-# reset for boot patching
-reset_ak;
-
 split_boot;
 flash_boot;
 ## end boot install
