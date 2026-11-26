@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 KERNEL_REPO="${KERNEL_REPO:-https://github.com/Evolution-X-Devices/kernel_xiaomi_sm8450.git}"
-KERNEL_BRANCH="${KERNEL_BRANCH:-4a234e4dff2373f31709a1d5acfc8eb3d636d571}"
+KERNEL_BRANCH="${KERNEL_BRANCH:-cnb}"
 ROOT_MODE="${ROOT_MODE:-ksun-susfs}"
 LTO_MODE="${LTO_MODE:-full}"
 ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG:-true}"
@@ -213,7 +213,11 @@ configure_kernel() {
   make O="$OUT_DIR" ARCH=arm64 LLVM=1 LLVM_IAS=1 TARGET_PRODUCT=marble "${defconfigs[@]}"
 
   if [[ "$ENABLE_PERF_CONFIG" != "true" ]]; then
-    "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" --disable WERROR
+    "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" \
+      --disable WERROR \
+      --disable DEBUG_INFO \
+      --disable DEBUG_INFO_DWARF4 \
+      --disable DEBUG_INFO_BTF
   fi
 
   case "$LTO_MODE" in
