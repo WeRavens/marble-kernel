@@ -8,8 +8,9 @@ KERNEL_REPO="${KERNEL_REPO:-https://github.com/Evolution-X-Devices/kernel_xiaomi
 KERNEL_BRANCH="${KERNEL_BRANCH:-4a234e4dff2373f31709a1d5acfc8eb3d636d571}"
 ROOT_MODE="${ROOT_MODE:-ksun-susfs}"
 LTO_MODE="${LTO_MODE:-full}"
+ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG:-true}"
 ENABLE_PERF_PATCHES="${ENABLE_PERF_PATCHES:-true}"
-TOOLCHAIN="${TOOLCHAIN:-rvclang-20.1.1}"
+TOOLCHAIN="${TOOLCHAIN:-aosp-r563880c}"
 LOCALVERSION_SUFFIX="${LOCALVERSION_SUFFIX:-}"
 
 WORK_DIR="${WORK_DIR:-$REPO_ROOT/work}"
@@ -32,26 +33,38 @@ die() {
 
 download_toolchain() {
   local tc_url=""
-  case "$TOOLCHAIN" in
-    rvclang-20.1.1)
-      tc_url="https://github.com/Rv-Project/RvClang/releases/download/20.1.1/RvClang-20.1.1-bolt-pgo-full_lto.tar.gz"
-      ;;
-    zyc-16.0.6)
-      tc_url="https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz"
-      ;;
-    *)
-      die "Unsupported TOOLCHAIN='$TOOLCHAIN' (expected rvclang-20.1.1 or zyc-16.0.6)"
-      ;;
-  esac
-
   local existing_clang=""
   existing_clang="$(find "$TOOLCHAIN_DIR" -maxdepth 4 \( -type f -o -type l \) -path '*/bin/clang' 2>/dev/null | head -n1 || true)"
+
   if [[ -z "$existing_clang" ]]; then
-    log "Downloading toolchain $TOOLCHAIN..."
-    local archive="$WORK_DIR/toolchain.tar.gz"
-    curl -fL --retry 3 --retry-delay 5 -o "$archive" "$tc_url"
-    tar -xf "$archive" -C "$TOOLCHAIN_DIR"
-    rm -f "$archive"
+    case "$TOOLCHAIN" in
+      aosp-r563880c)
+        log "Cloning AOSP clang-r563880c (matches stock Evolution X 12.2 compiler)..."
+        rm -rf "$TOOLCHAIN_DIR"
+        git clone --depth=1 https://github.com/bluegreensea/android_prebuilts_clang_kernel_linux-x86_clang-r563880c.git "$TOOLCHAIN_DIR"
+        ;;
+      rvclang-20.1.1)
+        tc_url="https://github.com/Rv-Project/RvClang/releases/download/20.1.1/RvClang-20.1.1-bolt-pgo-full_lto.tar.gz"
+        ;;
+      slim-llvm-22.1.8)
+        tc_url="https://mirrors.edge.kernel.org/pub/tools/llvm/files/llvm-22.1.8-x86_64.tar.xz"
+        ;;
+      zyc-16.0.6)
+        tc_url="https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz"
+        ;;
+      *)
+        die "Unsupported TOOLCHAIN='$TOOLCHAIN' (expected aosp-r563880c, rvclang-20.1.1, slim-llvm-22.1.8, or zyc-16.0.6)"
+        ;;
+    esac
+
+    if [[ -n "$tc_url" ]]; then
+      log "Downloading toolchain $TOOLCHAIN..."
+      local archive="$WORK_DIR/toolchain.tar"
+      curl -fL --retry 3 --retry-delay 5 -o "$archive" "$tc_url"
+      tar -xf "$archive" -C "$TOOLCHAIN_DIR"
+      rm -f "$archive"
+    fi
+
     existing_clang="$(find "$TOOLCHAIN_DIR" -maxdepth 4 \( -type f -o -type l \) -path '*/bin/clang' 2>/dev/null | head -n1 || true)"
   else
     log "Reusing cached toolchain at $TOOLCHAIN_DIR"
@@ -174,15 +187,19 @@ apply_perf_patches() {
 
 configure_kernel() {
   cd "$KERNEL_DIR"
-  cp -f "$REPO_ROOT/configs/marble_perf.config" "$KERNEL_DIR/arch/arm64/configs/vendor/marble_perf.config"
 
   local defconfigs=(
     "gki_defconfig"
     "vendor/waipio_GKI.config"
     "vendor/xiaomi_GKI.config"
     "vendor/marble_GKI.config"
-    "vendor/marble_perf.config"
+    "vendor/debugfs.config"
   )
+
+  if [[ "$ENABLE_PERF_CONFIG" == "true" ]]; then
+    cp -f "$REPO_ROOT/configs/marble_perf.config" "$KERNEL_DIR/arch/arm64/configs/vendor/marble_perf.config"
+    defconfigs+=("vendor/marble_perf.config")
+  fi
 
   if [[ "$ROOT_MODE" == "ksun-susfs" ]]; then
     cp -f "$REPO_ROOT/configs/ksu_susfs.config" "$KERNEL_DIR/arch/arm64/configs/vendor/ksu_susfs.config"
@@ -194,6 +211,10 @@ configure_kernel() {
 
   log "Generating defconfig: ${defconfigs[*]}"
   make O="$OUT_DIR" ARCH=arm64 LLVM=1 LLVM_IAS=1 TARGET_PRODUCT=marble "${defconfigs[@]}"
+
+  if [[ "$ENABLE_PERF_CONFIG" != "true" ]]; then
+    "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" --disable WERROR
+  fi
 
   case "$LTO_MODE" in
     full)
@@ -223,10 +244,17 @@ configure_kernel() {
 
   make O="$OUT_DIR" ARCH=arm64 LLVM=1 LLVM_IAS=1 TARGET_PRODUCT=marble olddefconfig
 
-  # Verify critical configs survived olddefconfig
+  # Verify critical KMI-match and user-requested configs survived olddefconfig
   grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config" || die "CONFIG_MODVERSIONS=y missing after olddefconfig!"
-  grep -q '^CONFIG_CFI_PERMISSIVE=y$' "$OUT_DIR/.config" || die "CONFIG_CFI_PERMISSIVE=y missing after olddefconfig!"
-  grep -q '^CONFIG_DEFAULT_BBR=y$' "$OUT_DIR/.config" || die "CONFIG_DEFAULT_BBR=y missing after olddefconfig!"
+  grep -q '^# CONFIG_DEBUG_FS is not set$' "$OUT_DIR/.config" || die "CONFIG_DEBUG_FS must be disabled (matches stock Evolution X)"
+  grep -q '^# CONFIG_PAGE_OWNER is not set$' "$OUT_DIR/.config" || die "CONFIG_PAGE_OWNER must be disabled (matches stock Evolution X)"
+  grep -q '^# CONFIG_PAGE_PINNER is not set$' "$OUT_DIR/.config" || die "CONFIG_PAGE_PINNER must be disabled (matches stock Evolution X)"
+
+  if [[ "$ENABLE_PERF_CONFIG" == "true" ]]; then
+    grep -q '^CONFIG_CFI_PERMISSIVE=y$' "$OUT_DIR/.config" || die "CONFIG_CFI_PERMISSIVE=y missing after olddefconfig!"
+    grep -q '^CONFIG_DEFAULT_BBR=y$' "$OUT_DIR/.config" || die "CONFIG_DEFAULT_BBR=y missing after olddefconfig!"
+  fi
+
   if [[ "$ROOT_MODE" == "ksun-susfs" ]]; then
     grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config" || die "CONFIG_KSU=y missing after olddefconfig!"
     grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config" || die "CONFIG_KSU_SUSFS=y missing after olddefconfig!"
@@ -302,6 +330,7 @@ KERNEL_COMMIT="${KERNEL_COMMIT}"
 ROOT_MODE="${ROOT_MODE}"
 LTO_MODE="${LTO_MODE}"
 TOOLCHAIN="${TOOLCHAIN}"
+ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG}"
 ENABLE_PERF_PATCHES="${ENABLE_PERF_PATCHES}"
 APPLIED_PATCHES="${APPLIED_PATCHES[*]:-none}"
 SKIPPED_PATCHES="${SKIPPED_PATCHES[*]:-none}"

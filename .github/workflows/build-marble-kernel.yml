@@ -20,6 +20,11 @@ on:
         options:
           - full
           - thin
+      enable_perf_config:
+        description: "Apply marble_perf.config (set false with root_mode=none for pure stock baseline test)"
+        type: boolean
+        required: true
+        default: true
       enable_perf_patches:
         description: "Apply KMI-safe WildKernels performance patches"
         type: boolean
@@ -29,9 +34,11 @@ on:
         description: "Clang toolchain"
         type: choice
         required: true
-        default: "rvclang-20.1.1"
+        default: "aosp-r563880c"
         options:
+          - aosp-r563880c
           - rvclang-20.1.1
+          - slim-llvm-22.1.8
           - zyc-16.0.6
       kernel_branch:
         description: "Evolution-X-Devices/kernel_xiaomi_sm8450 branch or 40-char commit SHA (default matches EvoX 12.2 Sep 2026)"
@@ -85,6 +92,7 @@ jobs:
         env:
           ROOT_MODE: ${{ inputs.root_mode }}
           LTO_MODE: ${{ inputs.lto_mode }}
+          ENABLE_PERF_CONFIG: ${{ inputs.enable_perf_config }}
           ENABLE_PERF_PATCHES: ${{ inputs.enable_perf_patches }}
           TOOLCHAIN: ${{ inputs.toolchain }}
           KERNEL_BRANCH: ${{ inputs.kernel_branch }}
@@ -111,6 +119,7 @@ jobs:
             echo "| **Base Source** | \`${KERNEL_REPO}\` (\`${KERNEL_BRANCH}\` @ \`${KERNEL_COMMIT}\`) |"
             echo "| **Root Mode** | \`${ROOT_MODE}\` |"
             echo "| **LTO Mode** | \`${LTO_MODE}\` |"
+            echo "| **Perf Config** | \`${ENABLE_PERF_CONFIG}\` |"
             echo "| **Toolchain** | \`${TOOLCHAIN}\` |"
             echo "| **Artifact** | \`${ZIP_NAME}\` |"
             echo "| **SHA-256** | \`${SHA256}\` |"
