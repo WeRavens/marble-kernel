@@ -45,14 +45,14 @@ download_toolchain() {
   esac
 
   local existing_clang=""
-  existing_clang="$(find "$TOOLCHAIN_DIR" -maxdepth 3 -type f -name clang 2>/dev/null | head -n1 || true)"
+  existing_clang="$(find "$TOOLCHAIN_DIR" -maxdepth 4 \( -type f -o -type l \) -path '*/bin/clang' 2>/dev/null | head -n1 || true)"
   if [[ -z "$existing_clang" ]]; then
     log "Downloading toolchain $TOOLCHAIN..."
     local archive="$WORK_DIR/toolchain.tar.gz"
     curl -fL --retry 3 --retry-delay 5 -o "$archive" "$tc_url"
     tar -xf "$archive" -C "$TOOLCHAIN_DIR"
     rm -f "$archive"
-    existing_clang="$(find "$TOOLCHAIN_DIR" -maxdepth 3 -type f -name clang | head -n1 || true)"
+    existing_clang="$(find "$TOOLCHAIN_DIR" -maxdepth 4 \( -type f -o -type l \) -path '*/bin/clang' 2>/dev/null | head -n1 || true)"
   else
     log "Reusing cached toolchain at $TOOLCHAIN_DIR"
   fi
@@ -60,6 +60,7 @@ download_toolchain() {
   [[ -n "$existing_clang" ]] || die "Could not locate clang binary in $TOOLCHAIN_DIR"
   CLANG_BIN_DIR="$(dirname "$existing_clang")"
   export PATH="$CLANG_BIN_DIR:$PATH"
+  export LD_LIBRARY_PATH="${CLANG_BIN_DIR}/../lib:${CLANG_BIN_DIR}/../lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   log "Using compiler: $(clang --version | head -n1)"
 }
 
