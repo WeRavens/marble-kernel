@@ -106,6 +106,17 @@ CONFIG_LTO_CLANG_FULL=y
 EOF
   fi
 
+  # Disable DWARF debug info to avoid runner OOM during LTO vmlinux link
+  # (Image & stripped .ko modules are unaffected)
+  sed -i '/^CONFIG_DEBUG_INFO=/d; /^CONFIG_DEBUG_INFO_DWARF4=/d; /^CONFIG_DEBUG_INFO_BTF=/d' "$defcfg"
+  cat >> "$defcfg" <<'EOF'
+
+# MarbleExtreme: Disable debug info to keep LTO link within runner RAM
+# CONFIG_DEBUG_INFO is not set
+# CONFIG_DEBUG_INFO_DWARF4 is not set
+# CONFIG_DEBUG_INFO_BTF is not set
+EOF
+
   # Commit defconfig tweak locally so git status stays clean for build_bouquet.sh trap cleanup
   git -C "$KERNEL_DIR" config user.name "MarbleExtreme"
   git -C "$KERNEL_DIR" config user.email "marble@local"
