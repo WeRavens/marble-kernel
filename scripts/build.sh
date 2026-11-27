@@ -159,7 +159,6 @@ apply_perf_patches() {
   local patches=(
     "reduce_cache_pressure.patch"
     "minimise_wakeup_time.patch"
-    "int_sqrt.patch"
     "reduce_freeze_timeout.patch"
     "silence_irq_cpu_logspam.patch"
     "silence_system_logspam.patch"
@@ -255,7 +254,6 @@ configure_kernel() {
   grep -q '^# CONFIG_PAGE_PINNER is not set$' "$OUT_DIR/.config" || die "CONFIG_PAGE_PINNER must be disabled (matches stock Evolution X)"
 
   if [[ "$ENABLE_PERF_CONFIG" == "true" ]]; then
-    grep -q '^CONFIG_CFI_PERMISSIVE=y$' "$OUT_DIR/.config" || die "CONFIG_CFI_PERMISSIVE=y missing after olddefconfig!"
     grep -q '^CONFIG_DEFAULT_BBR=y$' "$OUT_DIR/.config" || die "CONFIG_DEFAULT_BBR=y missing after olddefconfig!"
   fi
 
