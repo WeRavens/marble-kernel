@@ -20,6 +20,14 @@ on:
         options:
           - full
           - thin
+      opt_level:
+        description: "Compiler/LTO optimization level (O3 = max performance, O2 = stock default)"
+        type: choice
+        required: true
+        default: "O3"
+        options:
+          - O3
+          - O2
       enable_perf_config:
         description: "Apply marble_perf.config (set false with root_mode=none for pure stock baseline test)"
         type: boolean
@@ -94,6 +102,7 @@ jobs:
         env:
           ROOT_MODE: ${{ inputs.root_mode }}
           LTO_MODE: ${{ inputs.lto_mode }}
+          OPT_LEVEL: ${{ inputs.opt_level }}
           ENABLE_PERF_CONFIG: ${{ inputs.enable_perf_config }}
           ENABLE_PERF_PATCHES: ${{ inputs.enable_perf_patches }}
           TOOLCHAIN: ${{ inputs.toolchain }}
@@ -121,6 +130,7 @@ jobs:
             echo "| **Base Source** | \`${KERNEL_REPO}\` (\`${KERNEL_BRANCH}\` @ \`${KERNEL_COMMIT}\`) |"
             echo "| **Root Mode** | \`${ROOT_MODE}\` |"
             echo "| **LTO Mode** | \`${LTO_MODE}\` |"
+            echo "| **Opt Level** | \`${OPT_LEVEL}\` |"
             echo "| **Perf Config** | \`${ENABLE_PERF_CONFIG}\` |"
             echo "| **Toolchain** | \`${TOOLCHAIN}\` |"
             echo "| **Artifact** | \`${ZIP_NAME}\` |"

@@ -8,8 +8,9 @@ KERNEL_REPO="${KERNEL_REPO:-https://github.com/Evolution-X-Devices/kernel_xiaomi
 KERNEL_BRANCH="${KERNEL_BRANCH:-cnb}"
 ROOT_MODE="${ROOT_MODE:-ksun-susfs}"
 LTO_MODE="${LTO_MODE:-full}"
+OPT_LEVEL="${OPT_LEVEL:-O3}"
 ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG:-true}"
-ENABLE_PERF_PATCHES="${ENABLE_PERF_PATCHES:-true}"
+ENABLE_PERF_PATCHES="${ENABLE_PERF_PATCHES:-false}"
 TOOLCHAIN="${TOOLCHAIN:-aosp-r563880c}"
 LOCALVERSION_SUFFIX="${LOCALVERSION_SUFFIX:-}"
 
@@ -267,7 +268,13 @@ configure_kernel() {
 
 build_kernel() {
   cd "$KERNEL_DIR"
-  log "Starting kernel Image build (LTO=$LTO_MODE, jobs=$(nproc))..."
+  local extra_kcflags="-Wno-error"
+  local extra_ldflags=""
+  if [[ "$OPT_LEVEL" == "O3" && "$ENABLE_PERF_CONFIG" == "true" ]]; then
+    extra_kcflags="-O3 -Wno-error"
+    extra_ldflags="-O3 --lto-O3"
+  fi
+  log "Starting kernel Image build (LTO=$LTO_MODE, OPT=$OPT_LEVEL, jobs=$(nproc))..."
   export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-MarblePerf}"
   export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-GitHubActions}"
 
@@ -278,7 +285,8 @@ build_kernel() {
     LLVM_IAS=1 \
     CC="ccache clang" \
     TARGET_PRODUCT=marble \
-    KCFLAGS="-Wno-error" \
+    KCFLAGS="$extra_kcflags" \
+    ${extra_ldflags:+KBUILD_LDFLAGS="$extra_ldflags"} \
     Image
 
   IMAGE_PATH="$OUT_DIR/arch/arm64/boot/Image"
@@ -331,12 +339,21 @@ KERNEL_BRANCH="${KERNEL_BRANCH}"
 KERNEL_COMMIT="${KERNEL_COMMIT}"
 ROOT_MODE="${ROOT_MODE}"
 LTO_MODE="${LTO_MODE}"
+OPT_LEVEL="${OPT_LEVEL}"
 TOOLCHAIN="${TOOLCHAIN}"
 ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG}"
 ENABLE_PERF_PATCHES="${ENABLE_PERF_PATCHES}"
 APPLIED_PATCHES="${APPLIED_PATCHES[*]:-none}"
 SKIPPED_PATCHES="${SKIPPED_PATCHES[*]:-none}"
 EOF
+
+  if [[ -d "$REPO_ROOT/ksu-module" ]]; then
+    (
+      cd "$REPO_ROOT/ksu-module"
+      zip -r9 "$ARTIFACTS_DIR/MarblePerf-Tuner-KSU.zip" .
+    )
+    log "Created KSU runtime tuner module: $ARTIFACTS_DIR/MarblePerf-Tuner-KSU.zip"
+  fi
 
   log "Created artifact: $zip_path"
   log "SHA256: $sha256"
