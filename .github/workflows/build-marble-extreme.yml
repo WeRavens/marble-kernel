@@ -1,0 +1,137 @@
+name: Build POCO F5 (marble) Extreme Full-Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tcp_cong:
+        description: "Default TCP congestion control"
+        type: choice
+        required: true
+        default: "bbr"
+        options:
+          - bbr
+          - westwood
+      lto_mode:
+        description: "Clang LTO mode (thin = proven & faster, full = max optimization)"
+        type: choice
+        required: true
+        default: "thin"
+        options:
+          - thin
+          - full
+      build_ksu:
+        description: "Include KernelSU Image_ksu variant in zip"
+        type: boolean
+        required: true
+        default: true
+      build_susfs:
+        description: "Include KernelSU + SuSFS Image_susfs variant in zip"
+        type: boolean
+        required: true
+        default: true
+      kernel_branch:
+        description: "Pzqqt/android_kernel_xiaomi_marble branch"
+        type: string
+        required: true
+        default: "bouquet_ci"
+      create_release:
+        description: "Publish full-package zip to GitHub Releases"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build MarbleExtreme (${{ inputs.tcp_cong }} / ${{ inputs.lto_mode }} LTO)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Free runner disk space and add swap
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo fallocate -l 6G /swapfile_extra && sudo chmod 600 /swapfile_extra && sudo mkswap /swapfile_extra && sudo swapon /swapfile_extra || true
+          free -h
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache cpio curl flex git \
+            libelf-dev libssl-dev lld llvm python3 python-is-python3 python3-rich \
+            rsync tar unzip xz-utils zip zstd
+
+      - name: Restore Slim LLVM 23.1.6 cache
+        uses: actions/cache@v4
+        with:
+          path: ~/build_toolchain/llvm-23.1.6-x86_64.tar.xz
+          key: slim-llvm-23.1.6-x86_64
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-extreme-${{ inputs.kernel_branch }}-${{ inputs.lto_mode }}-${{ inputs.tcp_cong }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-extreme-${{ inputs.kernel_branch }}-${{ inputs.lto_mode }}-${{ inputs.tcp_cong }}-
+            ccache-extreme-${{ inputs.kernel_branch }}-
+
+      - name: Build full-package kernel (Image + modules + dtb/dtbo)
+        env:
+          KERNEL_BRANCH: ${{ inputs.kernel_branch }}
+          TCP_CONG: ${{ inputs.tcp_cong }}
+          LTO_MODE: ${{ inputs.lto_mode }}
+          BUILD_KSU: ${{ inputs.build_ksu }}
+          BUILD_SUSFS: ${{ inputs.build_susfs }}
+        run: |
+          export CCACHE_DIR="$HOME/.ccache"
+          ccache -M 4G
+          ccache -z
+          chmod +x scripts/build_extreme.sh
+          ./scripts/build_extreme.sh
+          ccache -s
+
+      - name: Write build summary
+        if: always() && hashFiles('artifacts/build-info.txt') != ''
+        run: |
+          source artifacts/build-info.txt
+          {
+            echo "## MarbleExtreme Full-Package Build Summary"
+            echo ""
+            echo "| Parameter | Value |"
+            echo "|---|---|"
+            echo "| **Device** | Xiaomi POCO F5 (\`marble\`) |"
+            echo "| **Base Source** | \`${KERNEL_REPO}\` (\`${KERNEL_BRANCH}\` @ \`${KERNEL_COMMIT}\`) |"
+            echo "| **Toolchain** | \`${TOOLCHAIN}\` |"
+            echo "| **Features** | MGLRU, ADIOS/SSG/CPQ I/O, 300Hz, PELT 12ms, RCU Lazy, DAMON |"
+            echo "| **TCP Congestion** | \`${TCP_CONG}\` |"
+            echo "| **LTO Mode** | \`${LTO_MODE}\` |"
+            echo "| **KernelSU (\`Image_ksu\`)** | \`${KSU_STATUS}\` |"
+            echo "| **SuSFS (\`Image_susfs\`)** | \`${SUSFS_STATUS}\` |"
+            echo "| **Artifact** | \`${ZIP_NAME}\` |"
+            echo "| **SHA-256** | \`${SHA256}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarbleExtreme-marble-${{ inputs.tcp_cong }}-${{ inputs.lto_mode }}
+          path: artifacts/*
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: inputs.create_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: marble-extreme-${{ inputs.tcp_cong }}-${{ github.run_number }}
+          name: MarbleExtreme 5.10.275 (${{ inputs.tcp_cong }} / ${{ inputs.lto_mode }} LTO) #${{ github.run_number }}
+          body_path: artifacts/build-info.txt
+          files: |
+            artifacts/*.zip
+            artifacts/*.sha256

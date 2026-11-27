@@ -26,10 +26,10 @@ on:
         required: true
         default: true
       enable_perf_patches:
-        description: "Apply KMI-safe WildKernels performance patches"
+        description: "Apply KMI-safe WildKernels performance patches (keep false for proven stability)"
         type: boolean
         required: true
-        default: true
+        default: false
       toolchain:
         description: "Clang toolchain"
         type: choice
