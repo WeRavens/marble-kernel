@@ -51,4 +51,10 @@ write_val /proc/sys/walt/input_boost/input_boost_ms 80
 write_val /proc/sys/kernel/sched_upmigrate "85 95"
 write_val /proc/sys/kernel/sched_downmigrate "75 85"
 
+# 5. Adreno 725 GPU tuning (verified nodes on marble / kgsl-3d0)
+write_val /sys/class/kgsl/kgsl-3d0/bus_split 0
+write_val /sys/class/kgsl/kgsl-3d0/throttling 0
+write_val /sys/class/kgsl/kgsl-3d0/force_no_nap 1
+write_val /sys/class/kgsl/kgsl-3d0/devfreq/polling_interval 10
+
 echo "=== MarblePerf Runtime Tuner finished ===" >> "$LOG"
