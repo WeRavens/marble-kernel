@@ -50,6 +50,11 @@ on:
           - "12"
           - "8"
           - "32"
+      enable_ssg:
+        description: "Phase 3.1: Port & enable SSG I/O scheduler (default UFS scheduler)"
+        type: boolean
+        required: true
+        default: true
       toolchain:
         description: "Clang toolchain"
         type: choice
@@ -113,6 +118,7 @@ jobs:
           ENABLE_PERF_CONFIG: ${{ inputs.enable_perf_config }}
           TIMER_HZ: ${{ inputs.timer_hz }}
           PELT_HALFLIFE: ${{ inputs.pelt_halflife }}
+          ENABLE_SSG: ${{ inputs.enable_ssg }}
           TOOLCHAIN: ${{ inputs.toolchain }}
           KERNEL_BRANCH: ${{ inputs.kernel_branch }}
         run: |
@@ -128,7 +134,7 @@ jobs:
         run: |
           source artifacts/build-info.txt
           {
-            echo "## MarbleEvoX Full-Package Build Summary (Phase 2)"
+            echo "## MarbleEvoX Full-Package Build Summary (Phase 3.1)"
             echo ""
             echo "| Parameter | Value |"
             echo "|---|---|"
@@ -139,6 +145,7 @@ jobs:
             echo "| **Root Mode** | \`${ROOT_MODE}\` |"
             echo "| **LTO / Opt** | \`${LTO_MODE}\` / \`${OPT_LEVEL}\` |"
             echo "| **Timer / PELT** | \`${TIMER_HZ} Hz\` / \`${PELT_HALFLIFE} ms\` |"
+            echo "| **SSG I/O Scheduler** | \`${ENABLE_SSG}\` |"
             echo "| **Perf Config (BBR+ZRAM)** | \`${ENABLE_PERF_CONFIG}\` |"
             echo "| **Toolchain** | \`${TOOLCHAIN}\` |"
             echo "| **Packaged Modules** | \`${VENDOR_BOOT_MODULES}\` compiled \`.ko\` |"
