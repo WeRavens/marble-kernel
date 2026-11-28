@@ -171,5 +171,55 @@ if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; t
   fi;
 fi;
 
+### 4. Optional interactive install of MarblePerf-Tuner-KSU v1.2 (Volume-key prompt)
+if [ -f "$AKHOME/_ksu_tuner/module.prop" ] && [ -f "$AKHOME/_ksu_tuner/service.sh" ]; then
+  ui_print " ";
+  if [ -d "/data/adb" ]; then
+    ui_print "================================================";
+    ui_print "  Install modul tambahan MarblePerf-Tuner v1.2?";
+    ui_print "  (BBR + MGLRU + SSG + WALT + Adreno 725 GPU)";
+    ui_print "  [Vol+] = YA (Install ke KernelSU-Next)";
+    ui_print "  [Vol-] = TIDAK (Lewati)";
+    ui_print "  (Otomatis lewati dalam 10 detik)";
+    ui_print "================================================";
+
+    ans_file="$AKHOME/.vol_ans";
+    rm -f "$ans_file";
+    (
+      timeout 10 getevent -lq 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+          *KEY_VOLUMEUP*DOWN*)
+            echo "yes" > "$ans_file";
+            killall getevent 2>/dev/null || true;
+            break;
+            ;;
+          *KEY_VOLUMEDOWN*DOWN*)
+            echo "no" > "$ans_file";
+            killall getevent 2>/dev/null || true;
+            break;
+            ;;
+        esac;
+      done;
+    );
+
+    if [ -f "$ans_file" ] && [ "$(cat "$ans_file")" = "yes" ]; then
+      mod_dst="/data/adb/modules/marbleperf_tuner";
+      mkdir -p "$mod_dst";
+      rm -f "$mod_dst/disable" "$mod_dst/remove";
+      cp -f "$AKHOME/_ksu_tuner/module.prop" "$mod_dst/module.prop";
+      cp -f "$AKHOME/_ksu_tuner/service.sh" "$mod_dst/service.sh";
+      chmod 0755 "$mod_dst" "$mod_dst/service.sh";
+      chmod 0644 "$mod_dst/module.prop";
+      chcon -R u:object_r:adb_data_file:s0 "$mod_dst" 2>/dev/null || true;
+      ui_print "  [OK] MarblePerf-Tuner-KSU v1.2 terpasang!";
+    else
+      ui_print "  [-] Instalasi MarblePerf-Tuner-KSU dilewati.";
+    fi;
+    rm -f "$ans_file";
+  else
+    ui_print "- Melewati MarblePerf-Tuner-KSU (/data/adb belum ter-decrypt/tersedia).";
+  fi;
+fi;
+
 ui_print " ";
 ui_print "- MarbleEvoX Full-Package install complete!";

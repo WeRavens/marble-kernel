@@ -29,16 +29,21 @@ write_val /proc/sys/net/ipv4/tcp_fastopen 3
 write_val /proc/sys/net/ipv4/tcp_ecn 1
 write_val /proc/sys/net/ipv4/tcp_notsent_lowat 16384
 
-# 2. Memory & VM tuning (snappier app cache, fewer background wakeups)
+# 2. Memory, VM & MGLRU tuning (snappier app cache, thrashing protection)
 write_val /proc/sys/vm/vfs_cache_pressure 50
 write_val /proc/sys/vm/swappiness 60
 write_val /proc/sys/vm/dirty_ratio 15
 write_val /proc/sys/vm/dirty_background_ratio 5
 write_val /proc/sys/vm/stat_interval 10
+write_val /sys/kernel/mm/lru_gen/enabled y
+write_val /sys/kernel/mm/lru_gen/min_ttl_ms 1000
 
-# 3. UFS 3.1 Storage I/O optimization
+# 3. UFS 3.1 Storage I/O optimization (prefer SSG scheduler when available)
 for q in /sys/block/sd*/queue /sys/block/dm-*/queue; do
   [ -d "$q" ] || continue
+  if [ -r "$q/scheduler" ] && grep -qw "ssg" "$q/scheduler" 2>/dev/null; then
+    write_val "$q/scheduler" ssg
+  fi
   write_val "$q/iostats" 0
   write_val "$q/add_random" 0
   write_val "$q/read_ahead_kb" 128
@@ -55,6 +60,7 @@ write_val /proc/sys/kernel/sched_downmigrate "75 85"
 write_val /sys/class/kgsl/kgsl-3d0/bus_split 0
 write_val /sys/class/kgsl/kgsl-3d0/throttling 0
 write_val /sys/class/kgsl/kgsl-3d0/force_no_nap 1
+write_val /sys/class/kgsl/kgsl-3d0/idle_timer 80
 write_val /sys/class/kgsl/kgsl-3d0/devfreq/polling_interval 10
 
 echo "=== MarblePerf Runtime Tuner finished ===" >> "$LOG"

@@ -146,7 +146,7 @@ jobs:
         run: |
           source artifacts/build-info.txt
           {
-            echo "## MarbleEvoX Full-Package Build Summary (Phase 3.3)"
+            echo "## MarbleEvoX Full-Package Build Summary (Phase 4 Final)"
             echo ""
             echo "| Parameter | Value |"
             echo "|---|---|"
