@@ -171,13 +171,13 @@ if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; t
   fi;
 fi;
 
-### 4. Optional interactive install of MarblePerf-Tuner-KSU v1.2 (Volume-key prompt)
+### 4. Optional interactive install of MarblePerf-Tuner-KSU v1.3 + WebUI (Volume-key prompt)
 if [ -f "$AKHOME/_ksu_tuner/module.prop" ] && [ -f "$AKHOME/_ksu_tuner/service.sh" ]; then
   ui_print " ";
   if [ -d "/data/adb" ]; then
     ui_print "================================================";
-    ui_print "  Install modul tambahan MarblePerf-Tuner v1.2?";
-    ui_print "  (BBR + MGLRU + SSG + WALT + Adreno 725 GPU)";
+    ui_print "  Install MarblePerf-Tuner v1.3 + WebUI?";
+    ui_print "  (Profil + BBR + MGLRU + SSG + GPU + Standby)";
     ui_print "  [Vol+] = YA (Install ke KernelSU-Next)";
     ui_print "  [Vol-] = TIDAK (Lewati)";
     ui_print "  (Otomatis lewati dalam 10 detik)";
@@ -204,20 +204,22 @@ if [ -f "$AKHOME/_ksu_tuner/module.prop" ] && [ -f "$AKHOME/_ksu_tuner/service.s
 
     if [ -f "$ans_file" ] && [ "$(cat "$ans_file")" = "yes" ]; then
       mod_dst="/data/adb/modules/marbleperf_tuner";
-      mkdir -p "$mod_dst";
+      mkdir -p "$mod_dst/webroot";
       rm -f "$mod_dst/disable" "$mod_dst/remove";
       cp -f "$AKHOME/_ksu_tuner/module.prop" "$mod_dst/module.prop";
       cp -f "$AKHOME/_ksu_tuner/service.sh" "$mod_dst/service.sh";
-      chmod 0755 "$mod_dst" "$mod_dst/service.sh";
-      chmod 0644 "$mod_dst/module.prop";
+      cp -f "$AKHOME/_ksu_tuner/apply.sh" "$mod_dst/apply.sh";
+      cp -f "$AKHOME/_ksu_tuner/webroot/index.html" "$mod_dst/webroot/index.html";
+      chmod 0755 "$mod_dst" "$mod_dst/webroot" "$mod_dst/service.sh" "$mod_dst/apply.sh";
+      chmod 0644 "$mod_dst/module.prop" "$mod_dst/webroot/index.html";
       chcon -R u:object_r:adb_data_file:s0 "$mod_dst" 2>/dev/null || true;
-      ui_print "  [OK] MarblePerf-Tuner-KSU v1.2 terpasang!";
+      ui_print "  [OK] MarblePerf-Tuner v1.3 + WebUI terpasang!";
     else
-      ui_print "  [-] Instalasi MarblePerf-Tuner-KSU dilewati.";
+      ui_print "  [-] Instalasi MarblePerf-Tuner dilewati.";
     fi;
     rm -f "$ans_file";
   else
-    ui_print "- Melewati MarblePerf-Tuner-KSU (/data/adb belum ter-decrypt/tersedia).";
+    ui_print "- Melewati MarblePerf-Tuner (/data/adb belum ter-decrypt/tersedia).";
   fi;
 fi;
 

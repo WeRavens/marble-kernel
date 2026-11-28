@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>MarblePerf Tuner</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --card: #141923;
+    --card2: #1b2230;
+    --accent: #60a5fa;
+    --accent2: #34d399;
+    --warn: #fbbf24;
+    --text: #eef2f6;
+    --muted: #8b95a7;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 16px 14px 36px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .title h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .title p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .btn-icon {
+    background: var(--card2); color: var(--accent); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .btn-icon:active { opacity: 0.7; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 14px; margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--muted); margin: 0 0 10px;
+  }
+  .grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  }
+  .stat {
+    background: var(--card2); border-radius: 12px; padding: 10px;
+  }
+  .stat .k { font-size: 11px; color: var(--muted); }
+  .stat .v { font-size: 14px; font-weight: 700; margin-top: 2px; color: var(--text); word-break: break-all; }
+  .stat .v.ok { color: var(--accent2); }
+  .profiles {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .prof-btn {
+    background: var(--card2); color: var(--muted); border: 1.5px solid transparent;
+    border-radius: 12px; padding: 12px 6px; text-align: center;
+    font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.15s;
+  }
+  .prof-btn small { display: block; font-weight: 400; font-size: 10px; margin-top: 3px; opacity: 0.8; }
+  .prof-btn.active {
+    background: rgba(96,165,250,0.14); color: var(--accent); border-color: var(--accent);
+  }
+  .row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; padding-bottom: 2px; }
+  .row-info { padding-right: 12px; }
+  .row-info .name { font-weight: 600; font-size: 14px; }
+  .row-info .desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; background: #2b3446; border-radius: 26px;
+    transition: 0.2s; cursor: pointer;
+  }
+  .slider:before {
+    content: ""; position: absolute; height: 20px; width: 20px;
+    left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s;
+  }
+  input:checked + .slider { background: var(--accent); }
+  input:checked + .slider:before { transform: translateX(20px); }
+  pre.log {
+    margin: 0; background: #090c11; border-radius: 10px; padding: 10px;
+    font-size: 11px; color: #a7f3d0; max-height: 180px; overflow: auto;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .toast {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    background: #1e293b; color: #fff; border: 1px solid var(--accent);
+    padding: 9px 16px; border-radius: 99px; font-size: 12.5px; font-weight: 600;
+    opacity: 0; pointer-events: none; transition: 0.2s; z-index: 99;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">
+      <h1>MarblePerf Tuner</h1>
+      <p>POCO F5 (marble) • MarbleEvoX v1.3</p>
+    </div>
+    <button class="btn-icon" onclick="loadStatus(true)">Refresh</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Status Kernel Live</div>
+    <div class="grid">
+      <div class="stat"><div class="k">TCP Congestion</div><div class="v ok" id="st_tcp">...</div></div>
+      <div class="stat"><div class="k">I/O Scheduler</div><div class="v ok" id="st_sched">...</div></div>
+      <div class="stat"><div class="k">MGLRU (LRU_GEN)</div><div class="v ok" id="st_mglru">...</div></div>
+      <div class="stat"><div class="k">GPU Adreno 725</div><div class="v" id="st_gpu">...</div></div>
+      <div class="stat"><div class="k">Suhu Baterai</div><div class="v" id="st_temp">...</div></div>
+      <div class="stat"><div class="k">Power-Eff WQ</div><div class="v" id="st_wq">...</div></div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--muted)" id="st_kernel">Kernel: ...</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Profil Sistem</div>
+    <div class="profiles">
+      <button class="prof-btn" id="p_battery" onclick="setProfile('battery')">
+        Battery<small>Irit &amp; Adem</small>
+      </button>
+      <button class="prof-btn" id="p_balanced" onclick="setProfile('balanced')">
+        Balanced<small>Harian Optimal</small>
+      </button>
+      <button class="prof-btn" id="p_gaming" onclick="setProfile('gaming')">
+        Gaming<small>Respons Maks</small>
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Pengaturan Fitur (Auto-Apply Saat Boot)</div>
+    <div class="row">
+      <div class="row-info">
+        <div class="name">Jaringan BBR &amp; Anti-Lag</div>
+        <div class="desc">TCP BBR + FQ, FastOpen, anti slow-start &amp; MTU probing</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt_NET" onchange="saveAndApply()"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div class="row-info">
+        <div class="name">MGLRU &amp; ZRAM Optimal</div>
+        <div class="desc">Aktifkan MGLRU (min_ttl 1000ms) + page-cluster=0 untuk ZRAM</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt_MGLRU" onchange="saveAndApply()"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div class="row-info">
+        <div class="name">UFS 3.1 + SSG &amp; Awet Storage</div>
+        <div class="desc">Scheduler SSG, matikan iostats &amp; kelompokkan write kecil</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt_UFS_SSG" onchange="saveAndApply()"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div class="row-info">
+        <div class="name">Adreno 725 GPU Tuning</div>
+        <div class="desc">KGSL bus_split, idle_timer &amp; polling mengikuti profil</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt_GPU" onchange="saveAndApply()"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div class="row-info">
+        <div class="name">Hemat Standby &amp; Kurangi Log</div>
+        <div class="desc">Power-efficient workqueue + matikan tracing/schedstats</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt_IDLE_SAVING" onchange="saveAndApply()"><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div class="row-info">
+        <div class="name">Privasi &amp; Stealth Kernel</div>
+        <div class="desc">Sembunyikan pointer kernel &amp; dmesg dari app non-root</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt_PRIVACY" onchange="saveAndApply()"><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Log Terakhir</div>
+    <pre class="log" id="log_box">Memuat...</pre>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const MOD = "/data/adb/modules/marbleperf_tuner";
+const CONF = "/data/adb/marbleperf_tuner.conf";
+let currentProfile = "balanced";
+let cbSeq = 0;
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(window._tt);
+  window._tt = setTimeout(() => el.classList.remove("show"), 2000);
+}
+
+function ksuExec(cmd) {
+  return new Promise((resolve, reject) => {
+    if (typeof ksu === "undefined" || typeof ksu.exec !== "function") {
+      return reject(new Error("Buka halaman ini dari KernelSU-Next Manager"));
+    }
+    const cbName = "__ksu_cb_" + (++cbSeq);
+    window[cbName] = (errno, stdout, stderr) => {
+      delete window[cbName];
+      resolve({ errno, stdout: stdout || "", stderr: stderr || "" });
+    };
+    try {
+      ksu.exec(cmd, "{}", cbName);
+    } catch (e) {
+      delete window[cbName];
+      reject(e);
+    }
+  });
+}
+
+function highlightProfile(p) {
+  currentProfile = p || "balanced";
+  ["battery", "balanced", "gaming"].forEach(id => {
+    document.getElementById("p_" + id).classList.toggle("active", id === currentProfile);
+  });
+}
+
+async function loadStatus(showToast) {
+  try {
+    const res = await ksuExec(`sh ${MOD}/apply.sh status`);
+    const map = {};
+    res.stdout.split("\n").forEach(l => {
+      const i = l.indexOf("=");
+      if (i > 0) map[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+    });
+    document.getElementById("st_tcp").textContent = map.TCP || "-";
+    document.getElementById("st_sched").textContent = map.SCHED || "-";
+    document.getElementById("st_mglru").textContent = map.MGLRU || "-";
+    document.getElementById("st_gpu").textContent = map.GPU_MHZ || "-";
+    document.getElementById("st_temp").textContent = map.BATT_TEMP || "-";
+    document.getElementById("st_wq").textContent = map.WQ_PE || "-";
+    document.getElementById("st_kernel").textContent = "Kernel: " + (map.KERNEL || "-");
+
+    highlightProfile(map.PROFILE);
+    ["NET", "MGLRU", "UFS_SSG", "GPU", "IDLE_SAVING", "PRIVACY"].forEach(k => {
+      const cb = document.getElementById("opt_" + k);
+      if (cb) cb.checked = (map["OPT_" + k] !== "0");
+    });
+
+    const lres = await ksuExec("tail -n 30 /data/local/tmp/marbleperf_tuner.log 2>/dev/null || echo 'Belum ada log'");
+    document.getElementById("log_box").textContent = lres.stdout.trim() || "Belum ada log";
+    if (showToast) toast("Status diperbarui");
+  } catch (e) {
+    document.getElementById("log_box").textContent = String(e);
+  }
+}
+
+function setProfile(p) {
+  highlightProfile(p);
+  saveAndApply();
+}
+
+async function saveAndApply() {
+  const g = k => document.getElementById("opt_" + k).checked ? "1" : "0";
+  const cfg = [
+    `PROFILE="${currentProfile}"`,
+    `OPT_NET="${g("NET")}"`,
+    `OPT_MGLRU="${g("MGLRU")}"`,
+    `OPT_UFS_SSG="${g("UFS_SSG")}"`,
+    `OPT_GPU="${g("GPU")}"`,
+    `OPT_IDLE_SAVING="${g("IDLE_SAVING")}"`,
+    `OPT_PRIVACY="${g("PRIVACY")}"`
+  ].join("\n");
+  try {
+    toast("Menerapkan...");
+    await ksuExec(`cat <<'EOF' > ${CONF}\n${cfg}\nEOF\nsh ${MOD}/apply.sh apply`);
+    await loadStatus(false);
+    toast("Profil " + currentProfile.toUpperCase() + " diterapkan!");
+  } catch (e) {
+    toast("Gagal: " + e.message);
+  }
+}
+
+loadStatus(false);
+</script>
+</body>
+</html>

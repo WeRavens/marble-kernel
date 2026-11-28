@@ -1,6 +1,6 @@
 id=marbleperf_tuner
 name=MarblePerf Runtime Tuner (POCO F5)
-version=v1.2
-versionCode=120
+version=v1.3
+versionCode=130
 author=WeRavens
-description=Runtime performance tuner for POCO F5 (marble) on MarbleEvoX Full-Package: TCP BBR+FQ, MGLRU, VM/ZRAM, UFS 3.1 + SSG I/O, WALT, and Adreno 725 GPU tuning.
+description=WebUI + runtime tuner for POCO F5 (marble) on MarbleEvoX: Profiles (Balanced/Battery/Gaming), TCP BBR+Anti-Lag, MGLRU, UFS+SSG, Adreno 725 GPU, Standby & Privacy.

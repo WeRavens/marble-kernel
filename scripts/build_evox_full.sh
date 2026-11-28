@@ -377,12 +377,14 @@ package_full_anykernel() {
   cp -f "$REPO_ROOT/anykernel/anykernel_evox_full.sh" "$ak3_dir/anykernel.sh"
   cp -f "$OUT_DIR/arch/arm64/boot/Image" "$ak3_dir/Image"
 
-  # Bundle MarblePerf-Tuner-KSU v1.2 for optional Volume-key install during flashing
+  # Bundle MarblePerf-Tuner-KSU v1.3 (with KernelSU WebUI) for optional Volume-key install
   if [[ "$ROOT_MODE" != "none" && -f "$REPO_ROOT/ksu-module/module.prop" && -f "$REPO_ROOT/ksu-module/service.sh" ]]; then
-    mkdir -p "$ak3_dir/_ksu_tuner"
+    mkdir -p "$ak3_dir/_ksu_tuner/webroot"
     cp -f "$REPO_ROOT/ksu-module/module.prop" "$ak3_dir/_ksu_tuner/module.prop"
     cp -f "$REPO_ROOT/ksu-module/service.sh" "$ak3_dir/_ksu_tuner/service.sh"
-    log "Bundled MarblePerf-Tuner-KSU into _ksu_tuner/ for optional Volume-key install."
+    cp -f "$REPO_ROOT/ksu-module/apply.sh" "$ak3_dir/_ksu_tuner/apply.sh"
+    cp -f "$REPO_ROOT/ksu-module/webroot/index.html" "$ak3_dir/_ksu_tuner/webroot/index.html"
+    log "Bundled MarblePerf-Tuner-KSU v1.3 + WebUI into _ksu_tuner/."
   fi
 
   # Stage ALL compiled .ko modules into a single _modules/ directory (no duplication,
