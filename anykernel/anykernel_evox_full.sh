@@ -30,7 +30,7 @@ split_boot;
 flash_boot;
 
 ### 2. Update vendor_boot ramdisk modules (keep DTB & bootconfig intact)
-if [ -d "$AKHOME/_vendor_boot_modules" ] && [ "$(ls -A "$AKHOME/_vendor_boot_modules" 2>/dev/null)" ]; then
+if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; then
   ui_print " ";
   ui_print "- Updating vendor_boot kernel modules...";
   rm -f "$AKHOME/Image";
@@ -39,31 +39,38 @@ if [ -d "$AKHOME/_vendor_boot_modules" ] && [ "$(ls -A "$AKHOME/_vendor_boot_mod
   IS_SLOT_DEVICE=1;
   RAMDISK_COMPRESSION=auto;
   PATCH_VBMETA_FLAG=auto;
+  NO_MAGISK_CHECK=1;
 
   reset_ak;
   dump_boot;
 
   updated_vb=0;
+  missed_vb=0;
   for moddir in "$RAMDISK/lib/modules" "$VENDORRD"/*/lib/modules; do
     if [ -d "$moddir" ]; then
-      for ko in "$AKHOME/_vendor_boot_modules"/*.ko; do
-        [ -f "$ko" ] || continue
-        base="$(basename "$ko")";
-        if [ -f "$moddir/$base" ]; then
-          cp -f "$ko" "$moddir/$base";
-          chmod 0644 "$moddir/$base";
+      for existing in "$moddir"/*.ko; do
+        [ -f "$existing" ] || continue
+        base="$(basename "$existing")";
+        if [ -f "$AKHOME/_modules/$base" ]; then
+          cp -f "$AKHOME/_modules/$base" "$existing" || abort "Failed copying $base into vendor_boot!";
+          chmod 0644 "$existing";
           updated_vb=$((updated_vb + 1));
+        else
+          missed_vb=$((missed_vb + 1));
         fi;
       done;
     fi;
   done;
 
-  ui_print "  Updated $updated_vb module(s) in vendor_boot.";
+  ui_print "  Updated $updated_vb module(s) in vendor_boot (unmatched: $missed_vb).";
+  if [ "$updated_vb" -eq 0 ]; then
+    abort "Zero modules updated in vendor_boot! Aborting...";
+  fi;
   write_boot;
 fi;
 
 ### 3. Update vendor_dlkm modules (ext4 partition inside super)
-if [ -d "$AKHOME/_vendor_dlkm_modules" ] && [ "$(ls -A "$AKHOME/_vendor_dlkm_modules" 2>/dev/null)" ]; then
+if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; then
   ui_print " ";
   ui_print "- Updating vendor_dlkm kernel modules...";
   vdlkm_blk="/dev/block/mapper/vendor_dlkm$SLOT";
@@ -80,20 +87,29 @@ if [ -d "$AKHOME/_vendor_dlkm_modules" ] && [ "$(ls -A "$AKHOME/_vendor_dlkm_mod
 
     if mount -t ext4 -o rw "$vdlkm_blk" "$vdlkm_mnt" 2>/dev/null || mount -o rw "$vdlkm_blk" "$vdlkm_mnt" 2>/dev/null; then
       updated_vd=0;
-      for ko in "$AKHOME/_vendor_dlkm_modules"/*.ko; do
-        [ -f "$ko" ] || continue
-        base="$(basename "$ko")";
-        if [ -f "$vdlkm_mnt/lib/modules/$base" ]; then
-          cp -f "$ko" "$vdlkm_mnt/lib/modules/$base";
-          chmod 0644 "$vdlkm_mnt/lib/modules/$base";
-          chcon u:object_r:vendor_file:s0 "$vdlkm_mnt/lib/modules/$base" 2>/dev/null || true;
+      missed_vd=0;
+      for existing in "$vdlkm_mnt/lib/modules"/*.ko; do
+        [ -f "$existing" ] || continue
+        base="$(basename "$existing")";
+        if [ -f "$AKHOME/_modules/$base" ]; then
+          cp -f "$AKHOME/_modules/$base" "$existing" || {
+            umount "$vdlkm_mnt" 2>/dev/null || true;
+            abort "Failed copying $base into vendor_dlkm (out of space?)!";
+          };
+          chmod 0644 "$existing";
+          chcon u:object_r:vendor_file:s0 "$existing" 2>/dev/null || true;
           updated_vd=$((updated_vd + 1));
+        else
+          missed_vd=$((missed_vd + 1));
         fi;
       done;
       sync;
       umount "$vdlkm_mnt";
       rmdir "$vdlkm_mnt" 2>/dev/null || true;
-      ui_print "  Updated $updated_vd module(s) in vendor_dlkm.";
+      ui_print "  Updated $updated_vd module(s) in vendor_dlkm (unmatched: $missed_vd).";
+      if [ "$updated_vd" -eq 0 ]; then
+        abort "Zero modules updated in vendor_dlkm! Aborting...";
+      fi;
     else
       ui_print "! Warning: Could not mount $vdlkm_blk rw (may be read-only or dm-verity).";
       abort "Failed to mount vendor_dlkm for module update. Aborting...";

@@ -288,46 +288,44 @@ package_full_anykernel() {
   rm -rf "$ak3_dir/.git" "$ak3_dir/modules" "$ak3_dir/patch" "$ak3_dir/ramdisk" \
          "$ak3_dir/README.md" "$ak3_dir/LICENSE"
 
-  mkdir -p "$ak3_dir/_vendor_boot_modules" "$ak3_dir/_vendor_dlkm_modules"
+  mkdir -p "$ak3_dir/_modules"
   cp -f "$REPO_ROOT/anykernel/anykernel_evox_full.sh" "$ak3_dir/anykernel.sh"
   cp -f "$OUT_DIR/arch/arm64/boot/Image" "$ak3_dir/Image"
 
-  # Build lookup map of all compiled .ko files
-  local ko_index="$WORK_DIR/ko_index.txt"
-  find "$MOD_STAGE" -type f -name '*.ko' > "$ko_index"
-  local total_ko
-  total_ko="$(wc -l < "$ko_index")"
-  log "Total compiled .ko modules staged: $total_ko"
+  # Stage ALL compiled .ko modules into a single _modules/ directory (no duplication,
+  # and guarantees 100% coverage of both vendor_boot and vendor_dlkm modules).
+  local total_ko=0
+  while IFS= read -r ko_path; do
+    [[ -f "$ko_path" ]] || continue
+    cp -f "$ko_path" "$ak3_dir/_modules/$(basename "$ko_path")"
+    total_ko=$((total_ko + 1))
+  done < <(find "$MOD_STAGE" -type f -name '*.ko' | sort)
+  log "Packaged all compiled .ko modules into _modules/: $total_ko"
 
-  copy_listed_modules() {
+  # Sanity-check coverage against Evolution X module lists
+  check_list_coverage() {
     local list_file="$1"
-    local dest_dir="$2"
-    local copied=0
+    local found=0
     local missing=0
     while IFS= read -r modname; do
       modname="${modname%%#*}"
       modname="$(echo "$modname" | tr -d '[:space:]')"
       [[ -n "$modname" ]] || continue
-      local found
-      found="$(grep -m1 "/${modname}$" "$ko_index" || true)"
-      if [[ -n "$found" ]]; then
-        cp -f "$found" "$dest_dir/$modname"
-        copied=$((copied + 1))
+      if [[ -f "$ak3_dir/_modules/$modname" ]]; then
+        found=$((found + 1))
       else
         missing=$((missing + 1))
       fi
     done < "$list_file"
-    log "  $(basename "$list_file") -> copied=$copied, skipped/built-in=$missing"
+    log "  Coverage $(basename "$list_file"): matched=$found, built-in/absent=$missing"
   }
 
-  copy_listed_modules "$KERNEL_DIR/modules.list.msm.waipio" "$ak3_dir/_vendor_boot_modules"
-  copy_listed_modules "$COMMON_DIR/modules.list.second_stage" "$ak3_dir/_vendor_boot_modules"
-  copy_listed_modules "$COMMON_DIR/modules.list.second_stage" "$ak3_dir/_vendor_dlkm_modules"
-  copy_listed_modules "$COMMON_DIR/modules.list.vendor_dlkm" "$ak3_dir/_vendor_dlkm_modules"
+  check_list_coverage "$KERNEL_DIR/modules.list.msm.waipio"
+  check_list_coverage "$COMMON_DIR/modules.list.second_stage"
+  check_list_coverage "$COMMON_DIR/modules.list.vendor_dlkm"
 
-  VB_COUNT="$(ls -1 "$ak3_dir/_vendor_boot_modules"/*.ko 2>/dev/null | wc -l || echo 0)"
-  VD_COUNT="$(ls -1 "$ak3_dir/_vendor_dlkm_modules"/*.ko 2>/dev/null | wc -l || echo 0)"
-  log "Packaged modules: vendor_boot=$VB_COUNT, vendor_dlkm=$VD_COUNT"
+  VB_COUNT="$total_ko"
+  VD_COUNT="$total_ko"
 
   local kver="5.10.269"
   if [[ -f "$OUT_DIR/include/config/kernel.release" ]]; then
