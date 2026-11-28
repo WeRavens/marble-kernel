@@ -66,7 +66,17 @@ if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; t
   if [ "$updated_vb" -eq 0 ]; then
     abort "Zero modules updated in vendor_boot! Aborting...";
   fi;
-  write_boot;
+  repack_ramdisk;
+  # Fix upstream ak3-core.sh bug on vendor_boot v4:
+  # magiskboot compress=<comp> produces <name>-new.cpio.<comp>, while flash_boot copies <name>-new.cpio.
+  for cpio_comp in "$AKHOME"/*-new.cpio.*; do
+    [ -f "$cpio_comp" ] || continue
+    cpio_base="${cpio_comp%.*}";
+    if [ ! -f "$cpio_base" ]; then
+      mv -f "$cpio_comp" "$cpio_base";
+    fi;
+  done;
+  flash_boot;
 fi;
 
 ### 3. Update vendor_dlkm modules (ext4 partition inside super)
