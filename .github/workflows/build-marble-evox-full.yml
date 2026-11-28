@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       root_mode:
-        description: "Root integration mode (use 'none' for Phase 1 baseline test)"
+        description: "Root integration mode (ksun-susfs recommended for Phase 2)"
         type: choice
         required: true
-        default: "none"
+        default: "ksun-susfs"
         options:
-          - none
           - ksun-susfs
+          - none
           - ksun-only
       lto_mode:
         description: "Clang LTO mode (full = stock EvoX + CFI_CLANG, thin = disables CFI_CLANG)"
@@ -21,18 +21,35 @@ on:
           - full
           - thin
       opt_level:
-        description: "Compiler optimization level"
+        description: "Compiler optimization level (O3 = -O3 --lto-O3)"
         type: choice
         required: true
-        default: "O2"
+        default: "O3"
         options:
-          - O2
           - O3
+          - O2
       enable_perf_config:
         description: "Apply marble_perf.config (TCP BBR + ZRAM)"
         type: boolean
         required: true
-        default: false
+        default: true
+      timer_hz:
+        description: "Kernel timer tick rate (300 Hz = snappier UI/touch, 250 Hz = stock)"
+        type: choice
+        required: true
+        default: "300"
+        options:
+          - "300"
+          - "250"
+      pelt_halflife:
+        description: "PELT scheduler half-life in ms (12 = balanced-fast, 8 = aggressive, 32 = stock)"
+        type: choice
+        required: true
+        default: "12"
+        options:
+          - "12"
+          - "8"
+          - "32"
       toolchain:
         description: "Clang toolchain"
         type: choice
@@ -94,6 +111,8 @@ jobs:
           LTO_MODE: ${{ inputs.lto_mode }}
           OPT_LEVEL: ${{ inputs.opt_level }}
           ENABLE_PERF_CONFIG: ${{ inputs.enable_perf_config }}
+          TIMER_HZ: ${{ inputs.timer_hz }}
+          PELT_HALFLIFE: ${{ inputs.pelt_halflife }}
           TOOLCHAIN: ${{ inputs.toolchain }}
           KERNEL_BRANCH: ${{ inputs.kernel_branch }}
         run: |
@@ -109,7 +128,7 @@ jobs:
         run: |
           source artifacts/build-info.txt
           {
-            echo "## MarbleEvoX Full-Package Build Summary (Phase 1)"
+            echo "## MarbleEvoX Full-Package Build Summary (Phase 2)"
             echo ""
             echo "| Parameter | Value |"
             echo "|---|---|"
@@ -119,8 +138,10 @@ jobs:
             echo "| **Modules Commit** | \`${MODULES_COMMIT}\` |"
             echo "| **Root Mode** | \`${ROOT_MODE}\` |"
             echo "| **LTO / Opt** | \`${LTO_MODE}\` / \`${OPT_LEVEL}\` |"
+            echo "| **Timer / PELT** | \`${TIMER_HZ} Hz\` / \`${PELT_HALFLIFE} ms\` |"
+            echo "| **Perf Config (BBR+ZRAM)** | \`${ENABLE_PERF_CONFIG}\` |"
             echo "| **Toolchain** | \`${TOOLCHAIN}\` |"
-            echo "| **Packaged Modules** | \`vendor_boot\`: ${VENDOR_BOOT_MODULES}, \`vendor_dlkm\`: ${VENDOR_DLKM_MODULES} |"
+            echo "| **Packaged Modules** | \`${VENDOR_BOOT_MODULES}\` compiled \`.ko\` |"
             echo "| **Artifact** | \`${ZIP_NAME}\` |"
             echo "| **SHA-256** | \`${SHA256}\` |"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -10,9 +10,11 @@ COMMON_REPO="${COMMON_REPO:-https://github.com/Evolution-X-Devices/device_xiaomi
 KERNEL_BRANCH="${KERNEL_BRANCH:-cnb}"
 
 ROOT_MODE="${ROOT_MODE:-none}"
-LTO_MODE="${LTO_MODE:-thin}"
+LTO_MODE="${LTO_MODE:-full}"
 OPT_LEVEL="${OPT_LEVEL:-O2}"
 ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG:-false}"
+TIMER_HZ="${TIMER_HZ:-250}"
+PELT_HALFLIFE="${PELT_HALFLIFE:-32}"
 TOOLCHAIN="${TOOLCHAIN:-aosp-r563880c}"
 
 # Layout: sm8450, sm8450-modules, and out are direct siblings in WORK_DIR
@@ -124,6 +126,17 @@ integrate_root() {
   esac
 }
 
+apply_phase2_patches() {
+  if [[ "$PELT_HALFLIFE" != "32" ]]; then
+    log "Applying Phase 2 PELT half-life patch (${PELT_HALFLIFE}ms)..."
+    python3 "$REPO_ROOT/scripts/apply_evox_full_phase2.py" \
+      --kernel-dir "$KERNEL_DIR" \
+      --pelt-halflife "$PELT_HALFLIFE"
+  else
+    log "Using stock PELT half-life (32ms)."
+  fi
+}
+
 configure_kernel() {
   cd "$KERNEL_DIR"
   local defconfigs=(
@@ -179,7 +192,28 @@ configure_kernel() {
       ;;
   esac
 
+  case "$TIMER_HZ" in
+    300)
+      "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" \
+        --disable HZ_100 \
+        --disable HZ_250 \
+        --enable HZ_300 \
+        --disable HZ_1000
+      ;;
+    250)
+      "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" \
+        --disable HZ_100 \
+        --enable HZ_250 \
+        --disable HZ_300 \
+        --disable HZ_1000
+      ;;
+    *)
+      die "Unsupported TIMER_HZ='$TIMER_HZ' (expected 300 or 250)"
+      ;;
+  esac
+
   make O="$OUT_DIR" ARCH=arm64 LLVM=1 LLVM_IAS=1 TARGET_PRODUCT=marble TARGET_BOARD_PLATFORM=taro olddefconfig
+  log "Verified timer config: $(grep -E '^CONFIG_HZ(_[0-9]+)?=' "$OUT_DIR/.config" | tr '\n' ' ')"
 }
 
 build_kernel_and_modules() {
@@ -339,9 +373,9 @@ package_full_anykernel() {
     KERNEL_RELEASE="${kver}-gki"
   fi
 
-  sed -i "s|^kernel.string=.*|kernel.string=MarbleEvoX Full (${KERNEL_RELEASE} / ${ROOT_MODE} / ${LTO_MODE}-${OPT_LEVEL})|" "$ak3_dir/anykernel.sh"
+  sed -i "s|^kernel.string=.*|kernel.string=MarbleEvoX Full (${KERNEL_RELEASE} / ${ROOT_MODE} / ${LTO_MODE}-${OPT_LEVEL} / ${TIMER_HZ}Hz / PELT${PELT_HALFLIFE})|" "$ak3_dir/anykernel.sh"
 
-  local zip_name="MarbleEvoXFull-${kver}-${ROOT_MODE}-${LTO_MODE}-${OPT_LEVEL}-${BUILD_DATE}.zip"
+  local zip_name="MarbleEvoXFull-${kver}-${ROOT_MODE}-${LTO_MODE}-${OPT_LEVEL}-${TIMER_HZ}Hz-PELT${PELT_HALFLIFE}-${BUILD_DATE}.zip"
   local zip_path="$ARTIFACTS_DIR/$zip_name"
 
   (
@@ -367,6 +401,9 @@ MODULES_COMMIT="${MODULES_COMMIT}"
 ROOT_MODE="${ROOT_MODE}"
 LTO_MODE="${LTO_MODE}"
 OPT_LEVEL="${OPT_LEVEL}"
+TIMER_HZ="${TIMER_HZ}"
+PELT_HALFLIFE="${PELT_HALFLIFE}"
+ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG}"
 TOOLCHAIN="${TOOLCHAIN}"
 VENDOR_BOOT_MODULES="${VB_COUNT}"
 VENDOR_DLKM_MODULES="${VD_COUNT}"
@@ -380,6 +417,7 @@ main() {
   download_toolchain
   clone_sources
   integrate_root
+  apply_phase2_patches
   configure_kernel
   build_kernel_and_modules
   package_full_anykernel
