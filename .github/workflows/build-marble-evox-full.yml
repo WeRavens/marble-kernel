@@ -1,0 +1,144 @@
+name: Build POCO F5 (marble) EvoX Full-Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_mode:
+        description: "Root integration mode (use 'none' for Phase 1 baseline test)"
+        type: choice
+        required: true
+        default: "none"
+        options:
+          - none
+          - ksun-susfs
+          - ksun-only
+      lto_mode:
+        description: "Clang LTO mode (thin = recommended & fast, full = heavy)"
+        type: choice
+        required: true
+        default: "thin"
+        options:
+          - thin
+          - full
+      opt_level:
+        description: "Compiler optimization level"
+        type: choice
+        required: true
+        default: "O2"
+        options:
+          - O2
+          - O3
+      enable_perf_config:
+        description: "Apply marble_perf.config (TCP BBR + ZRAM)"
+        type: boolean
+        required: true
+        default: false
+      toolchain:
+        description: "Clang toolchain"
+        type: choice
+        required: true
+        default: "aosp-r563880c"
+        options:
+          - aosp-r563880c
+          - slim-llvm-22.1.8
+      kernel_branch:
+        description: "Evolution-X-Devices sm8450 branch"
+        type: string
+        required: true
+        default: "cnb"
+      create_release:
+        description: "Publish Full-Package zip to GitHub Releases"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build EvoX Full (${{ inputs.root_mode }} / ${{ inputs.lto_mode }}-${{ inputs.opt_level }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Free runner disk space and add swap
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo fallocate -l 12G /swapfile_extra && sudo chmod 600 /swapfile_extra && sudo mkswap /swapfile_extra && sudo swapon /swapfile_extra || true
+          free -h
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache cpio curl flex git \
+            libelf-dev libssl-dev lld llvm python3 python-is-python3 \
+            rsync tar unzip xz-utils zip zstd
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-evoxfull-${{ inputs.kernel_branch }}-${{ inputs.toolchain }}-${{ inputs.lto_mode }}-${{ inputs.opt_level }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-evoxfull-${{ inputs.kernel_branch }}-${{ inputs.toolchain }}-${{ inputs.lto_mode }}-
+            ccache-evoxfull-${{ inputs.kernel_branch }}-${{ inputs.toolchain }}-
+
+      - name: Build pure Evolution X kernel + all modules (Full-Package)
+        env:
+          ROOT_MODE: ${{ inputs.root_mode }}
+          LTO_MODE: ${{ inputs.lto_mode }}
+          OPT_LEVEL: ${{ inputs.opt_level }}
+          ENABLE_PERF_CONFIG: ${{ inputs.enable_perf_config }}
+          TOOLCHAIN: ${{ inputs.toolchain }}
+          KERNEL_BRANCH: ${{ inputs.kernel_branch }}
+        run: |
+          export CCACHE_DIR="$HOME/.ccache"
+          ccache -M 6G
+          ccache -z
+          chmod +x scripts/build_evox_full.sh
+          ./scripts/build_evox_full.sh
+          ccache -s
+
+      - name: Write build summary
+        if: always() && hashFiles('artifacts/build-info.txt') != ''
+        run: |
+          source artifacts/build-info.txt
+          {
+            echo "## MarbleEvoX Full-Package Build Summary (Phase 1)"
+            echo ""
+            echo "| Parameter | Value |"
+            echo "|---|---|"
+            echo "| **Device** | Xiaomi POCO F5 (\`marble\`) |"
+            echo "| **Kernel Release** | \`${KERNEL_RELEASE}\` |"
+            echo "| **Kernel Commit** | \`${KERNEL_COMMIT}\` (\`${KERNEL_BRANCH}\`) |"
+            echo "| **Modules Commit** | \`${MODULES_COMMIT}\` |"
+            echo "| **Root Mode** | \`${ROOT_MODE}\` |"
+            echo "| **LTO / Opt** | \`${LTO_MODE}\` / \`${OPT_LEVEL}\` |"
+            echo "| **Toolchain** | \`${TOOLCHAIN}\` |"
+            echo "| **Packaged Modules** | \`vendor_boot\`: ${VENDOR_BOOT_MODULES}, \`vendor_dlkm\`: ${VENDOR_DLKM_MODULES} |"
+            echo "| **Artifact** | \`${ZIP_NAME}\` |"
+            echo "| **SHA-256** | \`${SHA256}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarbleEvoXFull-marble-${{ inputs.root_mode }}-${{ inputs.lto_mode }}
+          path: artifacts/*
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: inputs.create_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: marble-evoxfull-${{ inputs.root_mode }}-${{ github.run_number }}
+          name: MarbleEvoX Full-Package (${{ inputs.root_mode }} / ${{ inputs.lto_mode }}-${{ inputs.opt_level }}) #${{ github.run_number }}
+          body_path: artifacts/build-info.txt
+          files: |
+            artifacts/*.zip
+            artifacts/*.sha256
