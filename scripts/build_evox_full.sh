@@ -159,10 +159,14 @@ configure_kernel() {
 
   case "$LTO_MODE" in
     thin)
+      # Linux 5.10 GKI + CFI_CLANG + ThinLTO causes early-boot CFI crashes with external modules;
+      # disable CFI_CLANG when ThinLTO is explicitly selected.
       "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" \
         --enable LTO_CLANG \
         --disable LTO_CLANG_FULL \
-        --enable LTO_CLANG_THIN
+        --enable LTO_CLANG_THIN \
+        --disable CFI_CLANG \
+        --disable CFI_PERMISSIVE
       ;;
     full)
       "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" \

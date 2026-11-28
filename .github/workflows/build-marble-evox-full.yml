@@ -13,13 +13,13 @@ on:
           - ksun-susfs
           - ksun-only
       lto_mode:
-        description: "Clang LTO mode (thin = recommended & fast, full = heavy)"
+        description: "Clang LTO mode (full = stock EvoX + CFI_CLANG, thin = disables CFI_CLANG)"
         type: choice
         required: true
-        default: "thin"
+        default: "full"
         options:
-          - thin
           - full
+          - thin
       opt_level:
         description: "Compiler optimization level"
         type: choice
