@@ -96,23 +96,46 @@ if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; t
     umount /vendor_dlkm 2>/dev/null || true;
 
     if mount -t ext4 -o rw "$vdlkm_blk" "$vdlkm_mnt" 2>/dev/null || mount -o rw "$vdlkm_blk" "$vdlkm_mnt" 2>/dev/null; then
-      updated_vd=0;
+      mount -o remount,rw "$vdlkm_mnt" 2>/dev/null || true;
+      matched_list="$AKHOME/vdlkm_matched.txt";
+      rm -f "$matched_list";
+      touch "$matched_list";
       missed_vd=0;
       for existing in "$vdlkm_mnt/lib/modules"/*.ko; do
         [ -f "$existing" ] || continue
         base="$(basename "$existing")";
         if [ -f "$AKHOME/_modules/$base" ]; then
-          cp -f "$AKHOME/_modules/$base" "$existing" || {
-            umount "$vdlkm_mnt" 2>/dev/null || true;
-            abort "Failed copying $base into vendor_dlkm (out of space?)!";
-          };
-          chmod 0644 "$existing";
-          chcon u:object_r:vendor_file:s0 "$existing" 2>/dev/null || true;
-          updated_vd=$((updated_vd + 1));
+          echo "$base" >> "$matched_list";
         else
           missed_vd=$((missed_vd + 1));
         fi;
       done;
+
+      # Free space FIRST: stock vendor_dlkm.img only has ~0.27 MB free,
+      # so overwriting in-place fails with ENOSPC on the very first .ko!
+      while IFS= read -r base; do
+        [ -n "$base" ] || continue
+        rm_err="$(rm -f "$vdlkm_mnt/lib/modules/$base" 2>&1)" || {
+          ui_print "! rm error: $rm_err";
+          umount "$vdlkm_mnt" 2>/dev/null || true;
+          abort "Failed removing old $base from vendor_dlkm (read-only?)!";
+        };
+      done < "$matched_list";
+
+      updated_vd=0;
+      while IFS= read -r base; do
+        [ -n "$base" ] || continue
+        cp_err="$(cp -f "$AKHOME/_modules/$base" "$vdlkm_mnt/lib/modules/$base" 2>&1)" || {
+          ui_print "! cp error: $cp_err";
+          ui_print "! df: $(df -h "$vdlkm_mnt" 2>/dev/null | tail -n1)";
+          umount "$vdlkm_mnt" 2>/dev/null || true;
+          abort "Failed copying $base into vendor_dlkm!";
+        };
+        chmod 0644 "$vdlkm_mnt/lib/modules/$base";
+        chcon u:object_r:vendor_file:s0 "$vdlkm_mnt/lib/modules/$base" 2>/dev/null || true;
+        updated_vd=$((updated_vd + 1));
+      done < "$matched_list";
+      rm -f "$matched_list";
       sync;
       umount "$vdlkm_mnt";
       rmdir "$vdlkm_mnt" 2>/dev/null || true;
