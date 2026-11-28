@@ -97,29 +97,48 @@ if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; t
 
     if mount -t ext4 -o rw "$vdlkm_blk" "$vdlkm_mnt" 2>/dev/null || mount -o rw "$vdlkm_blk" "$vdlkm_mnt" 2>/dev/null; then
       mount -o remount,rw "$vdlkm_mnt" 2>/dev/null || true;
+
+      # Free ~20 MB immediately by removing unused qca6750 Wi-Fi driver (marble uses qca6490)
+      if [ -f "$vdlkm_mnt/lib/modules/qca_cld3_qca6750.ko" ] && [ ! -f "$AKHOME/_modules/qca_cld3_qca6750.ko" ]; then
+        rm -f "$vdlkm_mnt/lib/modules/qca_cld3_qca6750.ko" 2>/dev/null || true;
+      fi;
+
+      # Build authoritative module list from modules.dep (plus any existing .ko),
+      # so re-flashing self-heals even after a previously interrupted install.
       matched_list="$AKHOME/vdlkm_matched.txt";
-      rm -f "$matched_list";
-      touch "$matched_list";
-      missed_vd=0;
+      all_list="$AKHOME/vdlkm_all.txt";
+      rm -f "$matched_list" "$all_list";
+      touch "$matched_list" "$all_list";
+      if [ -f "$vdlkm_mnt/lib/modules/modules.dep" ]; then
+        sed -n 's|^\([^:]*\.ko\):.*|\1|p' "$vdlkm_mnt/lib/modules/modules.dep" | while IFS= read -r p; do
+          basename "$p" >> "$all_list";
+        done;
+      fi;
       for existing in "$vdlkm_mnt/lib/modules"/*.ko; do
         [ -f "$existing" ] || continue
-        base="$(basename "$existing")";
+        basename "$existing" >> "$all_list";
+      done;
+
+      missed_vd=0;
+      sort -u "$all_list" | while IFS= read -r base; do
+        [ -n "$base" ] || continue
         if [ -f "$AKHOME/_modules/$base" ]; then
           echo "$base" >> "$matched_list";
-        else
-          missed_vd=$((missed_vd + 1));
         fi;
       done;
+      rm -f "$all_list";
 
       # Free space FIRST: stock vendor_dlkm.img only has ~0.27 MB free,
       # so overwriting in-place fails with ENOSPC on the very first .ko!
       while IFS= read -r base; do
         [ -n "$base" ] || continue
-        rm_err="$(rm -f "$vdlkm_mnt/lib/modules/$base" 2>&1)" || {
-          ui_print "! rm error: $rm_err";
-          umount "$vdlkm_mnt" 2>/dev/null || true;
-          abort "Failed removing old $base from vendor_dlkm (read-only?)!";
-        };
+        if [ -f "$vdlkm_mnt/lib/modules/$base" ]; then
+          rm_err="$(rm -f "$vdlkm_mnt/lib/modules/$base" 2>&1)" || {
+            ui_print "! rm error: $rm_err";
+            umount "$vdlkm_mnt" 2>/dev/null || true;
+            abort "Failed removing old $base from vendor_dlkm (read-only?)!";
+          };
+        fi;
       done < "$matched_list";
 
       updated_vd=0;
@@ -139,7 +158,7 @@ if [ -d "$AKHOME/_modules" ] && [ "$(ls -A "$AKHOME/_modules" 2>/dev/null)" ]; t
       sync;
       umount "$vdlkm_mnt";
       rmdir "$vdlkm_mnt" 2>/dev/null || true;
-      ui_print "  Updated $updated_vd module(s) in vendor_dlkm (unmatched: $missed_vd).";
+      ui_print "  Updated $updated_vd module(s) in vendor_dlkm.";
       if [ "$updated_vd" -eq 0 ]; then
         abort "Zero modules updated in vendor_dlkm! Aborting...";
       fi;
