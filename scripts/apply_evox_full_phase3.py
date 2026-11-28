@@ -6,6 +6,7 @@ Stage 3.1: SSG (SamSung Generic) blk-mq I/O scheduler + cgroup support.
 
 import argparse
 import shutil
+import subprocess
 from pathlib import Path
 
 SSG_KCONFIG = """
@@ -71,15 +72,37 @@ def apply_ssg(repo_root: Path, kernel_dir: Path) -> None:
     print("[phase3] Applied SSG I/O scheduler (ssg-iosched + ssg-cgroup + default elevator).")
 
 
+def apply_rcu_lazy(repo_root: Path, kernel_dir: Path) -> None:
+    patch_dir = repo_root / "patches" / "evox-full" / "rcu_lazy"
+    patches = sorted(patch_dir.glob("*.patch"))
+    assert patches, f"No RCU Lazy patches found in {patch_dir}"
+    for p in patches:
+        print(f"[phase3] Applying RCU Lazy patch: {p.name}")
+        res = subprocess.run(
+            ["patch", "-p1", "--forward", "--batch", "--fuzz=3", "-i", str(p)],
+            cwd=str(kernel_dir),
+            capture_output=True,
+            text=True,
+        )
+        if res.returncode != 0:
+            print(res.stdout)
+            print(res.stderr)
+            raise SystemExit(f"[phase3][ERROR] Failed applying {p.name}")
+    print(f"[phase3] Applied all {len(patches)} RCU Lazy patches cleanly.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--kernel-dir", required=True, type=Path)
     parser.add_argument("--enable-ssg", action="store_true")
+    parser.add_argument("--enable-rcu-lazy", action="store_true")
     args = parser.parse_args()
 
     if args.enable_ssg:
         apply_ssg(args.repo_root, args.kernel_dir)
+    if args.enable_rcu_lazy:
+        apply_rcu_lazy(args.repo_root, args.kernel_dir)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG:-false}"
 TIMER_HZ="${TIMER_HZ:-250}"
 PELT_HALFLIFE="${PELT_HALFLIFE:-32}"
 ENABLE_SSG="${ENABLE_SSG:-false}"
+ENABLE_RCU_LAZY="${ENABLE_RCU_LAZY:-false}"
 TOOLCHAIN="${TOOLCHAIN:-aosp-r563880c}"
 
 # Layout: sm8450, sm8450-modules, and out are direct siblings in WORK_DIR
@@ -139,12 +140,16 @@ apply_phase2_patches() {
 }
 
 apply_phase3_patches() {
-  if [[ "$ENABLE_SSG" == "true" ]]; then
-    log "Applying Phase 3.1 patches (SSG I/O scheduler)..."
+  local phase3_args=()
+  [[ "$ENABLE_SSG" == "true" ]] && phase3_args+=(--enable-ssg)
+  [[ "$ENABLE_RCU_LAZY" == "true" ]] && phase3_args+=(--enable-rcu-lazy)
+
+  if (( ${#phase3_args[@]} > 0 )); then
+    log "Applying Phase 3 patches (${phase3_args[*]})..."
     python3 "$REPO_ROOT/scripts/apply_evox_full_phase3.py" \
       --repo-root "$REPO_ROOT" \
       --kernel-dir "$KERNEL_DIR" \
-      --enable-ssg
+      "${phase3_args[@]}"
   fi
 }
 
@@ -229,10 +234,20 @@ configure_kernel() {
       --enable MQ_IOSCHED_SSG_CGROUP
   fi
 
+  if [[ "$ENABLE_RCU_LAZY" == "true" ]]; then
+    "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" \
+      --enable RCU_NOCB_CPU \
+      --enable RCU_NOCB_CPU_DEFAULT_ALL \
+      --enable RCU_LAZY
+  fi
+
   make O="$OUT_DIR" ARCH=arm64 LLVM=1 LLVM_IAS=1 TARGET_PRODUCT=marble TARGET_BOARD_PLATFORM=taro olddefconfig
   log "Verified timer config: $(grep -E '^CONFIG_HZ(_[0-9]+)?=' "$OUT_DIR/.config" | tr '\n' ' ')"
   if [[ "$ENABLE_SSG" == "true" ]]; then
     log "Verified SSG config: $(grep -E '^CONFIG_MQ_IOSCHED_SSG' "$OUT_DIR/.config" | tr '\n' ' ')"
+  fi
+  if [[ "$ENABLE_RCU_LAZY" == "true" ]]; then
+    log "Verified RCU Lazy config: $(grep -E '^CONFIG_RCU_(NOCB_CPU|LAZY)' "$OUT_DIR/.config" | tr '\n' ' ')"
   fi
 }
 
@@ -393,12 +408,13 @@ package_full_anykernel() {
     KERNEL_RELEASE="${kver}-gki"
   fi
 
-  local ssg_tag=""
-  [[ "$ENABLE_SSG" == "true" ]] && ssg_tag="-SSG"
+  local feat_tag=""
+  [[ "$ENABLE_SSG" == "true" ]] && feat_tag="${feat_tag}-SSG"
+  [[ "$ENABLE_RCU_LAZY" == "true" ]] && feat_tag="${feat_tag}-RCULazy"
 
-  sed -i "s|^kernel.string=.*|kernel.string=MarbleEvoX Full (${KERNEL_RELEASE} / ${ROOT_MODE} / ${LTO_MODE}-${OPT_LEVEL} / ${TIMER_HZ}Hz / PELT${PELT_HALFLIFE}${ssg_tag})|" "$ak3_dir/anykernel.sh"
+  sed -i "s|^kernel.string=.*|kernel.string=MarbleEvoX Full (${KERNEL_RELEASE} / ${ROOT_MODE} / ${LTO_MODE}-${OPT_LEVEL} / ${TIMER_HZ}Hz / PELT${PELT_HALFLIFE}${feat_tag})|" "$ak3_dir/anykernel.sh"
 
-  local zip_name="MarbleEvoXFull-${kver}-${ROOT_MODE}-${LTO_MODE}-${OPT_LEVEL}-${TIMER_HZ}Hz-PELT${PELT_HALFLIFE}${ssg_tag}-${BUILD_DATE}.zip"
+  local zip_name="MarbleEvoXFull-${kver}-${ROOT_MODE}-${LTO_MODE}-${OPT_LEVEL}-${TIMER_HZ}Hz-PELT${PELT_HALFLIFE}${feat_tag}-${BUILD_DATE}.zip"
   local zip_path="$ARTIFACTS_DIR/$zip_name"
 
   (
@@ -427,6 +443,7 @@ OPT_LEVEL="${OPT_LEVEL}"
 TIMER_HZ="${TIMER_HZ}"
 PELT_HALFLIFE="${PELT_HALFLIFE}"
 ENABLE_SSG="${ENABLE_SSG}"
+ENABLE_RCU_LAZY="${ENABLE_RCU_LAZY}"
 ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG}"
 TOOLCHAIN="${TOOLCHAIN}"
 VENDOR_BOOT_MODULES="${VB_COUNT}"
