@@ -72,12 +72,12 @@ def apply_ssg(repo_root: Path, kernel_dir: Path) -> None:
     print("[phase3] Applied SSG I/O scheduler (ssg-iosched + ssg-cgroup + default elevator).")
 
 
-def apply_rcu_lazy(repo_root: Path, kernel_dir: Path) -> None:
-    patch_dir = repo_root / "patches" / "evox-full" / "rcu_lazy"
+def apply_patch_series(repo_root: Path, kernel_dir: Path, subdir: str, label: str) -> None:
+    patch_dir = repo_root / "patches" / "evox-full" / subdir
     patches = sorted(patch_dir.glob("*.patch"))
-    assert patches, f"No RCU Lazy patches found in {patch_dir}"
+    assert patches, f"No {label} patches found in {patch_dir}"
     for p in patches:
-        print(f"[phase3] Applying RCU Lazy patch: {p.name}")
+        print(f"[phase3] Applying {label} patch: {p.name}")
         res = subprocess.run(
             ["patch", "-p1", "--forward", "--batch", "--fuzz=3", "-i", str(p)],
             cwd=str(kernel_dir),
@@ -88,7 +88,7 @@ def apply_rcu_lazy(repo_root: Path, kernel_dir: Path) -> None:
             print(res.stdout)
             print(res.stderr)
             raise SystemExit(f"[phase3][ERROR] Failed applying {p.name}")
-    print(f"[phase3] Applied all {len(patches)} RCU Lazy patches cleanly.")
+    print(f"[phase3] Applied all {len(patches)} {label} patches cleanly.")
 
 
 def main() -> None:
@@ -97,12 +97,15 @@ def main() -> None:
     parser.add_argument("--kernel-dir", required=True, type=Path)
     parser.add_argument("--enable-ssg", action="store_true")
     parser.add_argument("--enable-rcu-lazy", action="store_true")
+    parser.add_argument("--enable-mglru", action="store_true")
     args = parser.parse_args()
 
     if args.enable_ssg:
         apply_ssg(args.repo_root, args.kernel_dir)
     if args.enable_rcu_lazy:
-        apply_rcu_lazy(args.repo_root, args.kernel_dir)
+        apply_patch_series(args.repo_root, args.kernel_dir, "rcu_lazy", "RCU Lazy")
+    if args.enable_mglru:
+        apply_patch_series(args.repo_root, args.kernel_dir, "mglru", "MGLRU")
 
 
 if __name__ == "__main__":

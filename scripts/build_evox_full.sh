@@ -17,6 +17,7 @@ TIMER_HZ="${TIMER_HZ:-250}"
 PELT_HALFLIFE="${PELT_HALFLIFE:-32}"
 ENABLE_SSG="${ENABLE_SSG:-false}"
 ENABLE_RCU_LAZY="${ENABLE_RCU_LAZY:-false}"
+ENABLE_MGLRU="${ENABLE_MGLRU:-false}"
 TOOLCHAIN="${TOOLCHAIN:-aosp-r563880c}"
 
 # Layout: sm8450, sm8450-modules, and out are direct siblings in WORK_DIR
@@ -143,6 +144,7 @@ apply_phase3_patches() {
   local phase3_args=()
   [[ "$ENABLE_SSG" == "true" ]] && phase3_args+=(--enable-ssg)
   [[ "$ENABLE_RCU_LAZY" == "true" ]] && phase3_args+=(--enable-rcu-lazy)
+  [[ "$ENABLE_MGLRU" == "true" ]] && phase3_args+=(--enable-mglru)
 
   if (( ${#phase3_args[@]} > 0 )); then
     log "Applying Phase 3 patches (${phase3_args[*]})..."
@@ -241,6 +243,13 @@ configure_kernel() {
       --enable RCU_LAZY
   fi
 
+  if [[ "$ENABLE_MGLRU" == "true" ]]; then
+    "$KERNEL_DIR/scripts/config" --file "$OUT_DIR/.config" \
+      --enable LRU_GEN \
+      --enable LRU_GEN_ENABLED \
+      --disable LRU_GEN_STATS
+  fi
+
   make O="$OUT_DIR" ARCH=arm64 LLVM=1 LLVM_IAS=1 TARGET_PRODUCT=marble TARGET_BOARD_PLATFORM=taro olddefconfig
   log "Verified timer config: $(grep -E '^CONFIG_HZ(_[0-9]+)?=' "$OUT_DIR/.config" | tr '\n' ' ')"
   if [[ "$ENABLE_SSG" == "true" ]]; then
@@ -248,6 +257,9 @@ configure_kernel() {
   fi
   if [[ "$ENABLE_RCU_LAZY" == "true" ]]; then
     log "Verified RCU Lazy config: $(grep -E '^CONFIG_RCU_(NOCB_CPU|LAZY)' "$OUT_DIR/.config" | tr '\n' ' ')"
+  fi
+  if [[ "$ENABLE_MGLRU" == "true" ]]; then
+    log "Verified MGLRU config: $(grep -E '^CONFIG_LRU_GEN' "$OUT_DIR/.config" | tr '\n' ' ')"
   fi
 }
 
@@ -411,6 +423,7 @@ package_full_anykernel() {
   local feat_tag=""
   [[ "$ENABLE_SSG" == "true" ]] && feat_tag="${feat_tag}-SSG"
   [[ "$ENABLE_RCU_LAZY" == "true" ]] && feat_tag="${feat_tag}-RCULazy"
+  [[ "$ENABLE_MGLRU" == "true" ]] && feat_tag="${feat_tag}-MGLRU"
 
   sed -i "s|^kernel.string=.*|kernel.string=MarbleEvoX Full (${KERNEL_RELEASE} / ${ROOT_MODE} / ${LTO_MODE}-${OPT_LEVEL} / ${TIMER_HZ}Hz / PELT${PELT_HALFLIFE}${feat_tag})|" "$ak3_dir/anykernel.sh"
 
@@ -444,6 +457,7 @@ TIMER_HZ="${TIMER_HZ}"
 PELT_HALFLIFE="${PELT_HALFLIFE}"
 ENABLE_SSG="${ENABLE_SSG}"
 ENABLE_RCU_LAZY="${ENABLE_RCU_LAZY}"
+ENABLE_MGLRU="${ENABLE_MGLRU}"
 ENABLE_PERF_CONFIG="${ENABLE_PERF_CONFIG}"
 TOOLCHAIN="${TOOLCHAIN}"
 VENDOR_BOOT_MODULES="${VB_COUNT}"
